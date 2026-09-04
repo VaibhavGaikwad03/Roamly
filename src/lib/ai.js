@@ -12,12 +12,28 @@
 //
 // Because everything goes through `aiChat`, and the user key comes from the
 // settings seam, a future per-account DB just changes where the key lives.
-import { getGroqKey } from './settings.js'
+import { getGroqKey, getGroqModel } from './settings.js'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const PROXY_URL = import.meta.env.VITE_AI_PROXY_URL
 const BUILD_KEY = import.meta.env.VITE_GROQ_API_KEY
-const MODEL = import.meta.env.VITE_GROQ_MODEL || 'llama-3.3-70b-versatile'
+export const DEFAULT_MODEL = 'llama-3.3-70b-versatile'
+
+// User's chosen model (Connect AI screen) wins, else a build-time override,
+// else the default.
+function model() {
+  return getGroqModel() || import.meta.env.VITE_GROQ_MODEL || DEFAULT_MODEL
+}
+
+// Pull Groq's human-readable error message out of a failed response body.
+async function errorMessage(res) {
+  const raw = await res.text().catch(() => '')
+  try {
+    return JSON.parse(raw)?.error?.message || raw
+  } catch {
+    return raw
+  }
+}
 
 export function aiEnabled() {
   return Boolean(getGroqKey() || PROXY_URL || BUILD_KEY)
@@ -30,24 +46,33 @@ export function aiMode() {
   return 'off'
 }
 
-// Check a candidate key with a minimal request, for the settings screen.
-export async function verifyGroqKey(key) {
+// Check a candidate key + the selected model with a minimal request.
+export async function verifyGroqKey(key, testModel) {
   const k = (key || '').trim()
   if (!k) return { ok: false, error: 'Enter a key first.' }
+  const useModel = testModel || model()
   try {
     const res = await fetch(GROQ_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${k}` },
       body: JSON.stringify({
-        model: MODEL,
+        model: useModel,
         messages: [{ role: 'user', content: 'ping' }],
         max_tokens: 1,
       }),
     })
     if (res.ok) return { ok: true }
-    if (res.status === 401) return { ok: false, error: 'Key rejected (401). Double-check it.' }
-    if (res.status === 429) return { ok: true, warn: 'Key works, but is rate-limited right now.' }
-    return { ok: false, error: `Groq returned ${res.status}.` }
+    if (res.status === 401)
+      return { ok: false, error: 'Key rejected (401). Double-check the key.' }
+    if (res.status === 429)
+      return { ok: true, warn: 'Key works, but is rate-limited right now.' }
+    const msg = await errorMessage(res)
+    if (res.status === 404)
+      return {
+        ok: false,
+        error: `Model “${useModel}” isn’t available for this key. Pick another model. (${msg})`,
+      }
+    return { ok: false, error: `Groq error ${res.status}: ${msg}` }
   } catch {
     return { ok: false, error: 'Could not reach Groq — check your connection.' }
   }
@@ -57,7 +82,7 @@ async function aiChat(messages, { json = false, temperature = 0.4 } = {}) {
   const userKey = getGroqKey()
 
   const body = {
-    model: MODEL,
+    model: model(),
     messages,
     temperature,
     ...(json ? { response_format: { type: 'json_object' } } : {}),
@@ -90,8 +115,10 @@ async function aiChat(messages, { json = false, temperature = 0.4 } = {}) {
   if (!res.ok) {
     if (res.status === 401)
       throw new Error('Your Groq key was rejected. Update it in AI settings.')
-    const detail = await res.text().catch(() => '')
-    throw new Error(`AI request failed (${res.status}). ${detail.slice(0, 120)}`)
+    const msg = await errorMessage(res)
+    if (res.status === 404)
+      throw new Error(`Model “${model()}” isn’t available — change it in AI settings.`)
+    throw new Error(`AI request failed (${res.status}). ${msg.slice(0, 120)}`)
   }
   const data = await res.json()
   return data.choices?.[0]?.message?.content ?? ''

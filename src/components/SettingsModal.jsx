@@ -1,35 +1,53 @@
 import { useState } from 'react'
-import { verifyGroqKey } from '../lib/ai.js'
+import { verifyGroqKey, DEFAULT_MODEL } from '../lib/ai.js'
 import {
   getGroqKey,
   setGroqKey,
   maskedGroqKey,
+  getGroqModel,
+  setGroqModel,
   getProfileName,
   setProfileName,
 } from '../lib/settings.js'
 
-// Per-user AI setup: the user brings their own Groq key, stored in this
-// browser and used to call Groq directly. This is the "connect AI" screen the
-// key-separation feature is built around.
+// A short list of common Groq models. Availability varies by account, so the
+// user can also type a custom id; the full list is at
+// https://console.groq.com/docs/models
+const MODELS = [
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B — versatile (default)' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B — instant (fastest)' },
+  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
+  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
+  { id: 'moonshotai/kimi-k2-instruct', label: 'Kimi K2' },
+  { id: 'deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 Distill 70B' },
+]
+
 export default function SettingsModal({ onClose, onSaved }) {
   const [name, setName] = useState(getProfileName())
   const [key, setKey] = useState('')
   const [show, setShow] = useState(false)
+
+  const savedModel = getGroqModel() || DEFAULT_MODEL
+  const known = MODELS.some((m) => m.id === savedModel)
+  const [modelChoice, setModelChoice] = useState(known ? savedModel : '__custom__')
+  const [customModel, setCustomModel] = useState(known ? '' : savedModel)
+
   const [status, setStatus] = useState(null) // { type, msg }
   const [busy, setBusy] = useState(false)
   const hadKey = Boolean(getGroqKey())
 
+  function resolvedModel() {
+    return modelChoice === '__custom__' ? customModel.trim() : modelChoice
+  }
+
   async function save(verify) {
     const trimmed = key.trim()
+    const chosenModel = resolvedModel()
     setProfileName(name.trim())
+    setGroqModel(chosenModel && chosenModel !== DEFAULT_MODEL ? chosenModel : '')
 
-    // Saving with an empty field but a key already present just keeps it.
-    if (!trimmed && hadKey) {
-      onSaved()
-      onClose()
-      return
-    }
-    if (!trimmed) {
+    const effectiveKey = trimmed || getGroqKey()
+    if (!effectiveKey) {
       setStatus({ type: 'error', msg: 'Enter your Groq API key first.' })
       return
     }
@@ -38,17 +56,17 @@ export default function SettingsModal({ onClose, onSaved }) {
     setStatus(null)
     try {
       if (verify) {
-        const r = await verifyGroqKey(trimmed)
+        const r = await verifyGroqKey(effectiveKey, chosenModel || DEFAULT_MODEL)
         if (!r.ok) {
           setStatus({ type: 'error', msg: r.error })
           return
         }
         if (r.warn) setStatus({ type: 'ok', msg: r.warn })
       }
-      setGroqKey(trimmed)
+      if (trimmed) setGroqKey(trimmed)
       onSaved()
       if (verify) {
-        setStatus({ type: 'ok', msg: 'Key verified and saved.' })
+        setStatus({ type: 'ok', msg: 'Key and model verified — saved.' })
         setTimeout(onClose, 700)
       } else {
         onClose()
@@ -119,13 +137,42 @@ export default function SettingsModal({ onClose, onSaved }) {
             </div>
           </label>
 
+          <label className="field">
+            <span>Model</span>
+            <select value={modelChoice} onChange={(e) => setModelChoice(e.target.value)}>
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+              <option value="__custom__">Custom…</option>
+            </select>
+          </label>
+          {modelChoice === '__custom__' && (
+            <label className="field">
+              <span>Custom model id</span>
+              <input
+                type="text"
+                value={customModel}
+                placeholder="e.g. llama-3.1-70b-versatile"
+                autoComplete="off"
+                spellCheck="false"
+                onChange={(e) => setCustomModel(e.target.value)}
+              />
+            </label>
+          )}
+
           <p className="ai-setup">
-            Get a free key at{' '}
+            Free key at{' '}
             <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">
               console.groq.com/keys
             </a>
-            . It's stored only on this device and sent straight to Groq — never to
-            us. <b>Account login with cross-device sync is planned.</b>
+            . If a model returns 404 it isn't enabled for your key — pick another or
+            see the{' '}
+            <a href="https://console.groq.com/docs/models" target="_blank" rel="noreferrer">
+              model list
+            </a>
+            . Stored only on this device. <b>Account sync is planned.</b>
           </p>
 
           {status && (

@@ -7,6 +7,7 @@
 // devices) is a change here, not across the app.
 const KEY_STORAGE = 'roamly.groq.key'
 const NAME_STORAGE = 'roamly.profile.name'
+const MODEL_STORAGE = 'roamly.groq.model'
 
 export function getGroqKey() {
   try {
@@ -34,6 +35,23 @@ export function maskedGroqKey() {
   const k = getGroqKey()
   if (!k) return ''
   return k.length <= 10 ? '••••' : `${k.slice(0, 4)}••••${k.slice(-4)}`
+}
+
+export function getGroqModel() {
+  try {
+    return localStorage.getItem(MODEL_STORAGE) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setGroqModel(value) {
+  try {
+    if (value) localStorage.setItem(MODEL_STORAGE, value)
+    else localStorage.removeItem(MODEL_STORAGE)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function getProfileName() {
