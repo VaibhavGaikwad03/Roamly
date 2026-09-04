@@ -103,7 +103,7 @@ h2 {
 
 .app {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   height: 100dvh;
 }
 
@@ -1014,7 +1014,7 @@ textarea {
 
 @media (max-width: 880px) {
   .app {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     border-right: 0;
