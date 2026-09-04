@@ -14,10 +14,10 @@ import {
 // user can also type a custom id; the full list is at
 // https://console.groq.com/docs/models
 const MODELS = [
-  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B — versatile (default)' },
-  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B — instant (fastest)' },
-  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
-  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
+  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B — fast (default)' },
+  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B — most capable' },
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B — versatile' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B — instant' },
   { id: 'moonshotai/kimi-k2-instruct', label: 'Kimi K2' },
   { id: 'deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 Distill 70B' },
 ]

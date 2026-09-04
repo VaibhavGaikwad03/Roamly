@@ -6,7 +6,7 @@
 // client). The frontend reaches this via VITE_AI_PROXY_URL="/api/ai", which a
 // netlify.toml redirect maps to this function, so no key is ever in the bundle.
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile'
+const DEFAULT_MODEL = 'openai/gpt-oss-20b'
 const ALLOWED_MODELS = new Set([
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',

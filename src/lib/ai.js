@@ -17,7 +17,7 @@ import { getGroqKey, getGroqModel } from './settings.js'
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const PROXY_URL = import.meta.env.VITE_AI_PROXY_URL
 const BUILD_KEY = import.meta.env.VITE_GROQ_API_KEY
-export const DEFAULT_MODEL = 'llama-3.3-70b-versatile'
+export const DEFAULT_MODEL = 'openai/gpt-oss-20b'
 
 // User's chosen model (Connect AI screen) wins, else a build-time override,
 // else the default.
@@ -107,11 +107,20 @@ async function aiChat(messages, { json = false, temperature = 0.4 } = {}) {
     throw new Error('Add your Groq API key to use AI features.')
   }
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(sendBody),
-  })
+  const post = (payload) =>
+    fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) })
+
+  let res = await post(sendBody)
+
+  // Some (reasoning) models reject strict JSON mode with a 400. Retry once
+  // without response_format — the prompts already ask for JSON and the parser
+  // tolerates prose around it.
+  if (!res.ok && res.status === 400 && json) {
+    const { response_format, ...noJson } = sendBody
+    void response_format
+    res = await post(noJson)
+  }
+
   if (!res.ok) {
     if (res.status === 401)
       throw new Error('Your Groq key was rejected. Update it in AI settings.')
