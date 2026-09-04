@@ -2,45 +2,74 @@
 // Each entry drives the filter chips, the add form, the list badges,
 // and the colored markers on the map.
 export const CATEGORIES = [
-  { id: 'restaurant', label: 'Restaurant', icon: '🍽️', color: '#ef4444' },
-  { id: 'cafe', label: 'Café', icon: '☕', color: '#b45309' },
-  { id: 'bar', label: 'Bar & Nightlife', icon: '🍸', color: '#a855f7' },
-  { id: 'hotel', label: 'Hotel & Stay', icon: '🛏️', color: '#6366f1' },
-  { id: 'attraction', label: 'Attraction', icon: '🎡', color: '#ec4899' },
-  { id: 'museum', label: 'Museum & Art', icon: '🏛️', color: '#0891b2' },
-  { id: 'nature', label: 'Nature & Park', icon: '🌲', color: '#16a34a' },
-  { id: 'beach', label: 'Beach', icon: '🏖️', color: '#eab308' },
-  { id: 'shopping', label: 'Shopping', icon: '🛍️', color: '#f97316' },
-  { id: 'other', label: 'Other', icon: '📍', color: '#64748b' },
+  { id: 'trek', label: 'Trek', icon: '🥾', color: '#a16207' },
+  { id: 'nature', label: 'Nature', icon: '🌲', color: '#16a34a' },
+  { id: 'waterfall', label: 'Waterfall', icon: '💦', color: '#06b6d4' },
+  { id: 'fort', label: 'Fort / Heritage', icon: '🏰', color: '#9a3412' },
+  { id: 'beach', label: 'Beach', icon: '🏖️', color: '#f59e0b' },
+  { id: 'viewpoint', label: 'Viewpoint', icon: '🌄', color: '#ea580c' },
+  { id: 'spiritual', label: 'Spiritual', icon: '🛕', color: '#7c3aed' },
+  { id: 'city', label: 'City / Town', icon: '🏙️', color: '#64748b' },
+  { id: 'food', label: 'Food', icon: '🍽️', color: '#ef4444' },
+  { id: 'stay', label: 'Stay', icon: '🏨', color: '#6366f1' },
+  { id: 'wildlife', label: 'Wildlife', icon: '🐾', color: '#65a30d' },
+  { id: 'camping', label: 'Camping', icon: '🏕️', color: '#059669' },
+  { id: 'lake', label: 'Lake / Dam', icon: '🏞️', color: '#0891b2' },
+  { id: 'caves', label: 'Caves', icon: '🗿', color: '#78716c' },
+  { id: 'adventure', label: 'Adventure', icon: '🎢', color: '#db2777' },
+  { id: 'sunset', label: 'Sunrise / Sunset', icon: '🌅', color: '#fb923c' },
 ]
 
 const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]))
 
-export function getCategory(id) {
-  return CATEGORY_MAP[id] || CATEGORY_MAP.other
+// Fallback category for unknown ids.
+const DEFAULT_ID = 'city'
+
+// Places saved under the app's previous category set are remapped so old pins
+// still show a sensible category after this taxonomy change.
+const LEGACY = {
+  restaurant: 'food',
+  cafe: 'food',
+  bar: 'food',
+  hotel: 'stay',
+  attraction: 'viewpoint',
+  museum: 'fort',
+  shopping: 'city',
+  other: 'city',
 }
 
-// Best-effort mapping from an OpenStreetMap / search result "class" or "type"
-// onto one of our categories, so searched places get a sensible default.
+export function getCategory(id) {
+  return CATEGORY_MAP[id] || CATEGORY_MAP[LEGACY[id]] || CATEGORY_MAP[DEFAULT_ID]
+}
+
+// Best-effort mapping from an OpenStreetMap / Google Places result "class",
+// "type", or "category" onto one of our categories, so searched places get a
+// sensible default.
 export function guessCategory(result) {
   const hay = `${result?.class || ''} ${result?.type || ''} ${
     result?.category || ''
   }`.toLowerCase()
 
   const rules = [
-    ['restaurant', ['restaurant', 'food', 'fast_food']],
-    ['cafe', ['cafe', 'coffee']],
-    ['bar', ['bar', 'pub', 'nightclub', 'biergarten']],
-    ['hotel', ['hotel', 'hostel', 'guest_house', 'motel', 'tourism.*hotel']],
-    ['museum', ['museum', 'gallery', 'artwork', 'arts_centre']],
-    ['nature', ['park', 'forest', 'wood', 'nature', 'garden', 'peak', 'natural']],
-    ['beach', ['beach', 'coast']],
-    ['shopping', ['shop', 'mall', 'supermarket', 'store', 'marketplace']],
-    ['attraction', ['attraction', 'viewpoint', 'monument', 'castle', 'theme_park', 'zoo', 'tourism']],
+    ['waterfall', ['waterfall']],
+    ['caves', ['cave', 'cave_entrance']],
+    ['beach', ['beach', 'coast', 'shore']],
+    ['spiritual', ['place_of_worship', 'temple', 'shrine', 'monastery', 'church', 'mosque', 'gurudwara', 'hindu', 'buddhist']],
+    ['fort', ['castle', 'fort', 'ruins', 'monument', 'memorial', 'archaeolog', 'heritage', 'citadel', 'palace', 'museum', 'gallery']],
+    ['camping', ['camp_site', 'camping', 'campground', 'caravan']],
+    ['stay', ['hotel', 'hostel', 'guest_house', 'motel', 'resort', 'lodging', 'apartment', 'chalet']],
+    ['food', ['restaurant', 'fast_food', 'cafe', 'coffee', 'food', 'bar', 'pub', 'biergarten', 'bakery', 'ice_cream']],
+    ['wildlife', ['zoo', 'wildlife', 'national_park', 'nature_reserve', 'safari', 'aviary', 'sanctuary']],
+    ['lake', ['water', 'lake', 'reservoir', 'dam', 'pond', 'wetland', 'bay', 'lagoon', 'river']],
+    ['viewpoint', ['viewpoint', 'peak', 'saddle', 'cliff', 'ridge', 'volcano']],
+    ['trek', ['trail', 'path', 'hiking', 'trailhead', 'via_ferrata', 'footway']],
+    ['nature', ['park', 'forest', 'wood', 'garden', 'natural', 'meadow', 'grassland', 'valley']],
+    ['adventure', ['theme_park', 'attraction', 'water_park', 'amusement', 'stadium', 'sports', 'climbing', 'pitch']],
+    ['city', ['city', 'town', 'village', 'suburb', 'neighbourhood', 'square', 'market', 'mall', 'shop', 'hamlet']],
   ]
 
   for (const [id, keywords] of rules) {
-    if (keywords.some((k) => new RegExp(k).test(hay))) return id
+    if (keywords.some((k) => hay.includes(k))) return id
   }
-  return 'other'
+  return DEFAULT_ID
 }

@@ -154,7 +154,8 @@ function parseJson(text) {
 }
 
 const CATEGORY_IDS =
-  'restaurant, cafe, bar, hotel, attraction, museum, nature, beach, shopping, other'
+  'trek, nature, waterfall, fort, beach, viewpoint, spiritual, city, food, stay, ' +
+  'wildlife, camping, lake, caves, adventure, sunset'
 
 // Turn free-text ("that ramen place in Shibuya") into structured place hints.
 // Returns [{ name, category, note }]; coordinates are resolved by geocoding
