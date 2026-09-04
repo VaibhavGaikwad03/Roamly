@@ -69,15 +69,26 @@ export default function PlaceForm({ onAdd }) {
 
   return (
     <div className="panel">
-      <h2 className="panel__title">Add a place</h2>
+      <div className="panel__title">Add a place</div>
 
       {!draft && (
         <>
           <div className="search">
+            <svg
+              className="search__icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
             <input
               type="text"
               value={query}
-              placeholder="Search for a place, city, or landmark…"
+              placeholder="Search a place, city, or landmark…"
               onChange={(e) => setQuery(e.target.value)}
               autoComplete="off"
               aria-label="Search for a place"
@@ -85,35 +96,50 @@ export default function PlaceForm({ onAdd }) {
             {loading && <span className="search__spinner" aria-hidden="true" />}
           </div>
           <p className="search__hint">
-            Searching with{' '}
-            {searchProvider === 'google' ? 'Google Places' : 'OpenStreetMap'}.
+            Searching with {searchProvider === 'google' ? 'Google Places' : 'OpenStreetMap'}.
           </p>
 
           {error && <p className="form__error">{error}</p>}
 
           {results.length > 0 && (
             <ul className="results">
-              {results.map((r) => (
-                <li key={r.id}>
-                  <button className="results__item" onClick={() => chooseResult(r)}>
-                    <span className="results__icon">{getCategory(guessCategory(r)).icon}</span>
-                    <span className="results__text">
-                      <strong>{r.name}</strong>
-                      <small>{r.address}</small>
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {results.map((r) => {
+                const cat = getCategory(guessCategory(r))
+                return (
+                  <li key={r.id}>
+                    <button className="results__item" onClick={() => chooseResult(r)}>
+                      <span
+                        className="results__icon"
+                        style={{ background: `${cat.color}22`, color: cat.color }}
+                      >
+                        {cat.icon}
+                      </span>
+                      <span className="results__text">
+                        <strong>{r.name}</strong>
+                        <small>{r.address}</small>
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>
       )}
 
       {draft && (
-        <form className="draft" onSubmit={submit}>
+        <form onSubmit={submit}>
           <div className="draft__head">
-            <strong>{draft.name}</strong>
-            {draft.address && <small>{draft.address}</small>}
+            <span
+              className="draft__pin"
+              style={{ background: getCategory(draft.category).color }}
+            >
+              {getCategory(draft.category).icon}
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <strong>{draft.name}</strong>
+              {draft.address && <small>{draft.address}</small>}
+            </div>
           </div>
 
           <label className="field">
@@ -124,7 +150,7 @@ export default function PlaceForm({ onAdd }) {
             >
               {CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.icon} {c.label}
+                  {c.icon}  {c.label}
                 </option>
               ))}
             </select>
@@ -138,34 +164,36 @@ export default function PlaceForm({ onAdd }) {
                 className={draft.status === 'want' ? 'active' : ''}
                 onClick={() => setDraft({ ...draft, status: 'want' })}
               >
-                Want to visit
+                ✦ Want to visit
               </button>
               <button
                 type="button"
                 className={draft.status === 'visited' ? 'active' : ''}
                 onClick={() => setDraft({ ...draft, status: 'visited' })}
               >
-                Visited
+                ✓ Visited
               </button>
             </div>
           </div>
 
           <label className="field">
-            <span>Notes (optional)</span>
+            <span>
+              Notes <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>(optional)</span>
+            </span>
             <textarea
               rows={2}
               value={draft.notes}
-              placeholder="Anything worth remembering…"
+              placeholder="A memory, a tip, a reason to go…"
               onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
             />
           </label>
 
-          <div className="draft__actions">
-            <button type="button" className="ghost" onClick={reset}>
+          <div className="row">
+            <button type="button" className="btn btn--ghost" onClick={reset}>
               Cancel
             </button>
-            <button type="submit" className="primary">
-              Add place
+            <button type="submit" className="btn btn--primary">
+              Add to atlas
             </button>
           </div>
         </form>

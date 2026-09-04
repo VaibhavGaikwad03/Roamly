@@ -13,30 +13,42 @@ export default function Filters({
 }) {
   return (
     <div className="filters">
-      <div className="segmented segmented--full">
+      <div className="segmented">
         {[
-          ['all', `All (${counts.all})`],
-          ['want', `Want to visit (${counts.want})`],
-          ['visited', `Visited (${counts.visited})`],
-        ].map(([value, label]) => (
+          ['all', 'All', counts.all],
+          ['want', 'Want', counts.want],
+          ['visited', 'Visited', counts.visited],
+        ].map(([value, label, n]) => (
           <button
             key={value}
             className={status === value ? 'active' : ''}
             onClick={() => onStatusChange(value)}
           >
-            {label}
+            {label} · {n}
           </button>
         ))}
       </div>
 
-      <input
-        type="search"
-        className="filters__text"
-        placeholder="Filter saved places…"
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-        aria-label="Filter saved places by name"
-      />
+      <div className="search">
+        <svg
+          className="search__icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          type="search"
+          placeholder="Filter your saved places…"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          aria-label="Filter saved places by name"
+        />
+      </div>
 
       <div className="chips">
         {CATEGORIES.map((c) => {
@@ -44,8 +56,12 @@ export default function Filters({
           return (
             <button
               key={c.id}
-              className={`chip ${active ? 'chip--active' : ''}`}
-              style={active ? { borderColor: c.color, background: `${c.color}1a` } : undefined}
+              className={`chip ${active ? 'active' : ''}`}
+              style={
+                active
+                  ? { borderColor: c.color, background: `${c.color}1f`, color: 'var(--ink)' }
+                  : undefined
+              }
               onClick={() => onToggleCategory(c.id)}
               aria-pressed={active}
             >
