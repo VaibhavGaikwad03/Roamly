@@ -52,10 +52,28 @@ VITE_AI_PROXY_URL=https://your-proxy.example/ai
 
 > ⚠️ A `VITE_GROQ_API_KEY` is bundled into the built page, so it's visible to
 > anyone who loads the site. That's fine for **local / personal** use. For a
-> **public** deployment, use `VITE_AI_PROXY_URL` instead — all AI calls route
-> through one module (`src/lib/ai.js`), so switching is a config change, not a
-> code change. The proxy receives `{ messages, json }` and should return an
-> OpenAI-style chat completion.
+> **public** deployment, use the serverless proxy below so the key stays
+> server-side. All AI calls route through one module (`src/lib/ai.js`), so
+> switching is a config change, not a code change.
+
+## Deploying to Netlify (with the AI key kept server-side)
+
+This repo is Netlify-ready: `netlify.toml` sets the build (`npm run build` →
+`dist`), wires `VITE_AI_PROXY_URL=/api/ai`, and a serverless function
+(`netlify/functions/ai.mjs`) proxies AI calls to Groq using a server-side key.
+
+1. Connect the repo in Netlify (build settings come from `netlify.toml`).
+2. In **Site settings → Environment variables**, add:
+   ```
+   GROQ_API_KEY = your_groq_key      # server-side only — no VITE_ prefix
+   ```
+   Do **not** set `VITE_GROQ_API_KEY` in Netlify — that would bundle the key
+   into the public page. Leave it unset; the proxy handles AI in production.
+3. Deploy. The browser calls `/api/ai`, the function adds the key and forwards
+   to Groq, and the key never reaches the client.
+
+> Because `VITE_AI_PROXY_URL` is set at build time, the AI features light up
+> automatically once `GROQ_API_KEY` is present on the server.
 
 ## Tech stack
 

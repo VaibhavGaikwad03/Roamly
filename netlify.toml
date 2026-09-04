@@ -1,0 +1,28 @@
+# Netlify configuration for Roamly.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Route browser AI calls to the serverless function (see
+  # netlify/functions/ai.mjs) so the Groq key stays server-side.
+  # The actual key is set as GROQ_API_KEY in the Netlify dashboard.
+  VITE_AI_PROXY_URL = "/api/ai"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# AI proxy: map the app's /api/ai to the serverless function. Must come before
+# the SPA fallback below (redirects are evaluated top-to-bottom, first match
+# wins) so the API call isn't swallowed by the catch-all.
+[[redirects]]
+  from = "/api/ai"
+  to = "/.netlify/functions/ai"
+  status = 200
+
+# Single-page app: serve index.html for any other unknown path.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
