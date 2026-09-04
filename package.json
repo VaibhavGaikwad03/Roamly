@@ -1,0 +1,22 @@
+{
+  "name": "roamly",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Roamly — a travel places tracker: add places, search, mark visited or want-to-visit, view on an interactive map, and filter by category.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
