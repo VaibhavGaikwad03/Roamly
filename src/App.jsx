@@ -5,6 +5,7 @@ import Filters from './components/Filters.jsx'
 import PlaceList from './components/PlaceList.jsx'
 import AiPanel from './components/AiPanel.jsx'
 import AiModal from './components/AiModal.jsx'
+import SettingsModal from './components/SettingsModal.jsx'
 import { CATEGORIES } from './lib/categories.js'
 import { HERO } from './lib/scenes.js'
 import { loadPlaces, savePlaces, createId } from './lib/storage.js'
@@ -26,6 +27,8 @@ export default function App() {
   const [theme, setTheme] = useState(getInitialTheme)
   const [view, setView] = useState('map') // mobile: map | list
   const [aiModal, setAiModal] = useState(null) // 'recommend' | 'plan' | null
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [, bumpAi] = useState(0) // force re-eval of aiEnabled() after key changes
 
   // Persist places.
   useEffect(() => {
@@ -164,6 +167,7 @@ export default function App() {
           <AiPanel
             onRecommend={() => setAiModal('recommend')}
             onPlan={() => setAiModal('plan')}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <Filters
@@ -199,9 +203,9 @@ export default function App() {
         </div>
 
         <footer className="foot">
-          <span>
-            {counts.all} place{counts.all === 1 ? '' : 's'} · saved in your browser
-          </span>
+          <button className="theme-toggle" onClick={() => setSettingsOpen(true)}>
+            🔑 AI key
+          </button>
           <button className="theme-toggle" onClick={toggleTheme}>
             ◑ Theme
           </button>
@@ -248,6 +252,13 @@ export default function App() {
           places={places}
           onClose={() => setAiModal(null)}
           onAddPlace={addPlace}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => bumpAi((n) => n + 1)}
         />
       )}
     </div>

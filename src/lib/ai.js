@@ -1,30 +1,60 @@
 // Single entry point for all AI calls, so features never touch the transport.
 //
-// Resolution order (set one in a `.env` file):
-//   1. VITE_AI_PROXY_URL — POST { messages, json } to your own serverless
-//      function that holds the Groq key server-side. Safe for public deploys.
-//   2. VITE_GROQ_API_KEY — call Groq directly from the browser. Simplest for
-//      local / personal use, but the key is visible in the shipped page.
-//   3. Neither — AI is disabled; the UI shows a short setup hint instead.
+// Resolution order (highest priority first):
+//   1. The user's own Groq key (set in the app, stored in their browser) —
+//      "bring your own key". Called directly from the browser; it's their key
+//      on their device, so nothing central is exposed.
+//   2. VITE_AI_PROXY_URL — POST { messages, json } to a serverless function
+//      that holds a shared key server-side. Safe for public deploys.
+//   3. VITE_GROQ_API_KEY — a build-time browser key (visible in the page;
+//      local/personal use only).
+//   4. None — AI is disabled; the UI shows a "set your key" prompt.
 //
-// Because everything goes through `aiChat`, switching from a browser key to a
-// proxy later is a config change, not a code change.
+// Because everything goes through `aiChat`, and the user key comes from the
+// settings seam, a future per-account DB just changes where the key lives.
+import { getGroqKey } from './settings.js'
+
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const PROXY_URL = import.meta.env.VITE_AI_PROXY_URL
-const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY
+const BUILD_KEY = import.meta.env.VITE_GROQ_API_KEY
 const MODEL = import.meta.env.VITE_GROQ_MODEL || 'llama-3.3-70b-versatile'
 
 export function aiEnabled() {
-  return Boolean(PROXY_URL || GROQ_KEY)
+  return Boolean(getGroqKey() || PROXY_URL || BUILD_KEY)
 }
 
 export function aiMode() {
+  if (getGroqKey()) return 'user'
   if (PROXY_URL) return 'proxy'
-  if (GROQ_KEY) return 'browser'
+  if (BUILD_KEY) return 'browser'
   return 'off'
 }
 
+// Check a candidate key with a minimal request, for the settings screen.
+export async function verifyGroqKey(key) {
+  const k = (key || '').trim()
+  if (!k) return { ok: false, error: 'Enter a key first.' }
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${k}` },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+      }),
+    })
+    if (res.ok) return { ok: true }
+    if (res.status === 401) return { ok: false, error: 'Key rejected (401). Double-check it.' }
+    if (res.status === 429) return { ok: true, warn: 'Key works, but is rate-limited right now.' }
+    return { ok: false, error: `Groq returned ${res.status}.` }
+  } catch {
+    return { ok: false, error: 'Could not reach Groq — check your connection.' }
+  }
+}
+
 async function aiChat(messages, { json = false, temperature = 0.4 } = {}) {
-  if (!aiEnabled()) throw new Error('AI is not configured.')
+  const userKey = getGroqKey()
 
   const body = {
     model: MODEL,
@@ -33,20 +63,35 @@ async function aiChat(messages, { json = false, temperature = 0.4 } = {}) {
     ...(json ? { response_format: { type: 'json_object' } } : {}),
   }
 
-  const endpoint = PROXY_URL || 'https://api.groq.com/openai/v1/chat/completions'
+  let endpoint
+  let sendBody
   const headers = { 'Content-Type': 'application/json' }
-  if (!PROXY_URL) headers.Authorization = `Bearer ${GROQ_KEY}`
+
+  if (userKey) {
+    endpoint = GROQ_URL
+    headers.Authorization = `Bearer ${userKey}`
+    sendBody = body
+  } else if (PROXY_URL) {
+    endpoint = PROXY_URL
+    sendBody = { ...body, json }
+  } else if (BUILD_KEY) {
+    endpoint = GROQ_URL
+    headers.Authorization = `Bearer ${BUILD_KEY}`
+    sendBody = body
+  } else {
+    throw new Error('Add your Groq API key to use AI features.')
+  }
 
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
-    // A proxy may accept the same OpenAI-shaped body; we also send the raw
-    // fields so a thin proxy can forward or reshape as it likes.
-    body: JSON.stringify(PROXY_URL ? { ...body, json } : body),
+    body: JSON.stringify(sendBody),
   })
   if (!res.ok) {
+    if (res.status === 401)
+      throw new Error('Your Groq key was rejected. Update it in AI settings.')
     const detail = await res.text().catch(() => '')
-    throw new Error(`AI request failed (${res.status}). ${detail.slice(0, 140)}`)
+    throw new Error(`AI request failed (${res.status}). ${detail.slice(0, 120)}`)
   }
   const data = await res.json()
   return data.choices?.[0]?.message?.content ?? ''

@@ -37,8 +37,24 @@ category.
 
 ## AI setup (optional)
 
-The AI features are hidden until you configure a provider. Copy `.env.example`
-to `.env` and set **one** of:
+### Bring your own key (default — no config)
+
+Each user connects their **own** Groq key from inside the app: click
+**✨ Connect AI** (sidebar) or **🔑 AI key** (footer), paste a key from
+[console.groq.com/keys](https://console.groq.com/keys), and **Verify & save**.
+The key is stored only in that browser and sent straight to Groq — there's no
+central key to manage or expose. This is the default on a public deploy, so
+every visitor uses their own key and quota.
+
+> Account login with cross-device sync (key **and** saved places) is planned;
+> the key/profile access is already isolated behind `src/lib/settings.js` so a
+> backend can slot in there without touching the rest of the app.
+
+### Or configure a key at build time (optional)
+
+For local development or a shared key, copy `.env.example` to `.env` and set
+**one** of the following. A user's own in-app key always takes priority over
+these.
 
 ```
 # Local / personal — calls Groq directly from the browser (simplest).

@@ -3,11 +3,15 @@
   command = "npm run build"
   publish = "dist"
 
-[build.environment]
-  # Route browser AI calls to the serverless function (see
-  # netlify/functions/ai.mjs) so the Groq key stays server-side.
-  # The actual key is set as GROQ_API_KEY in the Netlify dashboard.
-  VITE_AI_PROXY_URL = "/api/ai"
+# AI is bring-your-own-key by default: each visitor enters their own Groq key
+# in the app (stored in their browser), so there is no central key to manage.
+#
+# To instead run a shared, server-side key for everyone, uncomment the line
+# below and set GROQ_API_KEY in the Netlify dashboard — the included function
+# (netlify/functions/ai.mjs) then proxies AI calls. A user's own key, if set,
+# always takes priority over the shared one.
+# [build.environment]
+#   VITE_AI_PROXY_URL = "/api/ai"
 
 [functions]
   directory = "netlify/functions"
