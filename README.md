@@ -22,8 +22,40 @@ category.
 - **🏷️ Filter by category** — restaurants, cafés, hotels, attractions, nature,
   beaches, museums, shopping, bars, and more. Combine category chips with a
   status filter and a live text search.
+- **🔗 Add via Google Maps link** — paste a Google Maps URL (or plain
+  `lat, lng`) and Roamly extracts the location. Short links are detected with a
+  hint to paste the full URL.
+- **✨ AI features (optional)** — powered by [Groq](https://groq.com/):
+  - **Smart add** — describe a place in plain language ("that rooftop bar in
+    Bangkok I want to try"); AI names it and Roamly geocodes it to a real pin.
+  - **Place insights** — an AI blurb per place: what it's known for, best time
+    to visit, a tip.
+  - **Recommendations** — suggestions based on where you've been, one-tap to add.
+  - **Trip planner** — turns your want-to-visit list into a day-by-day itinerary.
 - **💾 Persistent** — everything is saved in your browser's `localStorage`, so
   your places are still there when you come back. No account, no backend.
+
+## AI setup (optional)
+
+The AI features are hidden until you configure a provider. Copy `.env.example`
+to `.env` and set **one** of:
+
+```
+# Local / personal — calls Groq directly from the browser (simplest).
+# Free key: https://console.groq.com/keys
+VITE_GROQ_API_KEY=your_key_here
+
+# — or, for a public deployment — point at your own serverless proxy that
+#   holds the key server-side, keeping it out of the shipped page:
+VITE_AI_PROXY_URL=https://your-proxy.example/ai
+```
+
+> ⚠️ A `VITE_GROQ_API_KEY` is bundled into the built page, so it's visible to
+> anyone who loads the site. That's fine for **local / personal** use. For a
+> **public** deployment, use `VITE_AI_PROXY_URL` instead — all AI calls route
+> through one module (`src/lib/ai.js`), so switching is a config change, not a
+> code change. The proxy receives `{ messages, json }` and should return an
+> OpenAI-style chat completion.
 
 ## Tech stack
 

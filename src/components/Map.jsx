@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { getCategory } from '../lib/categories.js'
 import { scene } from '../lib/scenes.js'
+import { aiEnabled, placeInsights } from '../lib/ai.js'
 
 // Build a colored pin marker as an inline SVG data URL, avoiding Leaflet's
 // default marker-image loading issues under bundlers.
@@ -53,10 +54,28 @@ function FitToPlaces({ places }) {
 function PlaceMarker({ place, active, onSelect, onStatusToggle, onDelete }) {
   const markerRef = useRef(null)
   const cat = getCategory(place.category)
+  const [insights, setInsights] = useState(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [insightsError, setInsightsError] = useState('')
 
   useEffect(() => {
     if (active && markerRef.current) markerRef.current.openPopup()
   }, [active])
+
+  async function loadInsights() {
+    if (insights || insightsLoading) return
+    setInsightsLoading(true)
+    setInsightsError('')
+    try {
+      const data = await placeInsights(place)
+      if (data) setInsights(data)
+      else setInsightsError('No insights came back.')
+    } catch (err) {
+      setInsightsError(err.message || 'Could not load insights.')
+    } finally {
+      setInsightsLoading(false)
+    }
+  }
 
   return (
     <Marker
@@ -94,6 +113,41 @@ function PlaceMarker({ place, active, onSelect, onStatusToggle, onDelete }) {
               ✕
             </button>
           </div>
+
+          {aiEnabled() && (
+            <div className="insights">
+              {!insights && !insightsLoading && !insightsError && (
+                <button
+                  className="btn btn--ai"
+                  style={{ width: '100%', padding: '8px', fontSize: 12 }}
+                  onClick={loadInsights}
+                >
+                  ✨ AI insights
+                </button>
+              )}
+              {insightsLoading && (
+                <div className="insights__load">
+                  <span className="mini-spinner" /> Reading up on {place.name}…
+                </div>
+              )}
+              {insightsError && <p className="form__error">{insightsError}</p>}
+              {insights && (
+                <div className="insights__block">
+                  {insights.summary && <div>{insights.summary}</div>}
+                  {insights.bestTime && (
+                    <div className="insights__row">
+                      <b>Best time:</b> {insights.bestTime}
+                    </div>
+                  )}
+                  {insights.tip && (
+                    <div className="insights__row">
+                      <b>Tip:</b> {insights.tip}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Popup>
     </Marker>

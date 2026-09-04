@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { searchPlaces, searchProvider, reverseGeocode, guessCategory } from '../lib/places.js'
 import { parseGoogleMapsUrl, isGoogleMapsShortLink } from '../lib/googleMaps.js'
+import { aiEnabled, extractPlacesFromText } from '../lib/ai.js'
 import { CATEGORIES, getCategory } from '../lib/categories.js'
 
 // Search for a place — by name/keyword or by pasting a Google Maps link —
@@ -14,6 +15,10 @@ export default function PlaceForm({ onAdd }) {
   const [link, setLink] = useState('')
   const [linkLoading, setLinkLoading] = useState(false)
   const [linkError, setLinkError] = useState('')
+  const [aiText, setAiText] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [aiResults, setAiResults] = useState([])
   const [draft, setDraft] = useState(null)
   const abortRef = useRef(null)
 
@@ -107,6 +112,68 @@ export default function PlaceForm({ onAdd }) {
     }
   }
 
+  // Smart add: free text -> structured places (AI) -> geocode each for real
+  // coordinates. The model only names places; positions come from geocoding.
+  async function addFromText(e) {
+    e.preventDefault()
+    const text = aiText.trim()
+    if (!text) return
+    setAiError('')
+    setAiResults([])
+    setAiLoading(true)
+    try {
+      const hints = await extractPlacesFromText(text)
+      if (hints.length === 0) {
+        setAiError('Couldn’t pull a place out of that. Try naming it more directly.')
+        return
+      }
+      const located = await Promise.all(
+        hints.map(async (h) => {
+          try {
+            const found = await searchPlaces(h.name)
+            if (found.length === 0) return null
+            const r = found[0]
+            return {
+              id: r.id,
+              name: r.name,
+              address: r.address,
+              lat: r.lat,
+              lng: r.lng,
+              category: h.category || guessCategory(r),
+              note: h.note || '',
+            }
+          } catch {
+            return null
+          }
+        }),
+      )
+      const ok = located.filter(Boolean)
+      if (ok.length === 0) {
+        setAiError('Found places, but couldn’t locate them on the map. Try the Search tab.')
+        return
+      }
+      setAiResults(ok)
+    } catch (err) {
+      setAiError(err.message || 'AI request failed.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function chooseAiResult(r) {
+    setDraft({
+      name: r.name,
+      address: r.address,
+      lat: r.lat,
+      lng: r.lng,
+      category: r.category,
+      status: 'want',
+      notes: r.note || '',
+    })
+    setAiResults([])
+    setAiText('')
+  }
+
   function reset() {
     setDraft(null)
     setQuery('')
@@ -114,6 +181,9 @@ export default function PlaceForm({ onAdd }) {
     setError('')
     setLink('')
     setLinkError('')
+    setAiText('')
+    setAiError('')
+    setAiResults([])
   }
 
   function submit(e) {
@@ -142,8 +212,17 @@ export default function PlaceForm({ onAdd }) {
               className={mode === 'link' ? 'active' : ''}
               onClick={() => setMode('link')}
             >
-              🔗 Google link
+              🔗 Link
             </button>
+            {aiEnabled() && (
+              <button
+                type="button"
+                className={mode === 'ai' ? 'active' : ''}
+                onClick={() => setMode('ai')}
+              >
+                ✨ Smart
+              </button>
+            )}
           </div>
 
           {mode === 'search' && (
@@ -236,6 +315,50 @@ export default function PlaceForm({ onAdd }) {
               <div className="row">
                 <button type="submit" className="btn btn--primary" disabled={linkLoading}>
                   {linkLoading ? 'Looking up…' : 'Find place'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {mode === 'ai' && (
+            <form onSubmit={addFromText}>
+              <textarea
+                rows={2}
+                value={aiText}
+                placeholder="Describe a place… “that rooftop bar in Bangkok I want to try”"
+                onChange={(e) => setAiText(e.target.value)}
+                aria-label="Describe a place in your own words"
+              />
+              <p className="search__hint">
+                AI reads your description and finds the place on the map.
+              </p>
+              {aiError && <p className="form__error">{aiError}</p>}
+              {aiResults.length > 0 && (
+                <ul className="results">
+                  {aiResults.map((r) => {
+                    const cat = getCategory(r.category)
+                    return (
+                      <li key={r.id}>
+                        <button className="results__item" onClick={() => chooseAiResult(r)}>
+                          <span
+                            className="results__icon"
+                            style={{ background: `${cat.color}22`, color: cat.color }}
+                          >
+                            {cat.icon}
+                          </span>
+                          <span className="results__text">
+                            <strong>{r.name}</strong>
+                            <small>{r.note || r.address}</small>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <div className="row">
+                <button type="submit" className="btn btn--ai" disabled={aiLoading}>
+                  {aiLoading ? 'Thinking…' : '✨ Find places'}
                 </button>
               </div>
             </form>

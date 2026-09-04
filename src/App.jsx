@@ -3,6 +3,8 @@ import Map from './components/Map.jsx'
 import PlaceForm from './components/PlaceForm.jsx'
 import Filters from './components/Filters.jsx'
 import PlaceList from './components/PlaceList.jsx'
+import AiPanel from './components/AiPanel.jsx'
+import AiModal from './components/AiModal.jsx'
 import { CATEGORIES } from './lib/categories.js'
 import { HERO } from './lib/scenes.js'
 import { loadPlaces, savePlaces, createId } from './lib/storage.js'
@@ -23,6 +25,7 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [view, setView] = useState('map') // mobile: map | list
+  const [aiModal, setAiModal] = useState(null) // 'recommend' | 'plan' | null
 
   // Persist places.
   useEffect(() => {
@@ -158,6 +161,11 @@ export default function App() {
 
           <PlaceForm onAdd={addPlace} />
 
+          <AiPanel
+            onRecommend={() => setAiModal('recommend')}
+            onPlan={() => setAiModal('plan')}
+          />
+
           <Filters
             status={status}
             onStatusChange={setStatus}
@@ -233,6 +241,15 @@ export default function App() {
           Map
         </button>
       </div>
+
+      {aiModal && (
+        <AiModal
+          kind={aiModal}
+          places={places}
+          onClose={() => setAiModal(null)}
+          onAddPlace={addPlace}
+        />
+      )}
     </div>
   )
 }
