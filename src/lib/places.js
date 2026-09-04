@@ -76,5 +76,33 @@ async function searchOsm(query, signal) {
   }))
 }
 
+// Reverse-geocode a coordinate into a display name + address, so a place
+// pasted as raw coordinates (e.g. from a Google Maps link) gets a real label.
+// Uses OpenStreetMap/Nominatim (free, no key).
+export async function reverseGeocode(lat, lng, { signal } = {}) {
+  const url = new URL('https://nominatim.openstreetmap.org/reverse')
+  url.searchParams.set('lat', String(lat))
+  url.searchParams.set('lon', String(lng))
+  url.searchParams.set('format', 'jsonv2')
+  url.searchParams.set('zoom', '18')
+  url.searchParams.set('addressdetails', '1')
+
+  try {
+    const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data || data.error) return null
+    return {
+      name: data.name || data.display_name?.split(',')[0] || '',
+      address: data.display_name || '',
+      class: data.class || '',
+      type: data.type || '',
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') throw err
+    return null
+  }
+}
+
 // Convenience re-export so callers can categorize a search result.
 export { guessCategory }
