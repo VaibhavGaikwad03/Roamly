@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'rea
 import L from 'leaflet'
 import { getCategory } from '../lib/categories.js'
 import { scene } from '../lib/scenes.js'
-import { aiEnabled, placeInsights } from '../lib/ai.js'
+import { placeInsights } from '../lib/ai.js'
 
 // Build a colored pin marker as an inline SVG data URL, avoiding Leaflet's
 // default marker-image loading issues under bundlers.
@@ -51,7 +51,7 @@ function FitToPlaces({ places }) {
 
 // A single marker + popup. Opens its popup automatically when it becomes the
 // selected place (so choosing a place from the list opens it on the map too).
-function PlaceMarker({ place, active, onSelect, onStatusToggle, onDelete }) {
+function PlaceMarker({ place, active, onSelect, onStatusToggle, onDelete, aiEnabled }) {
   const markerRef = useRef(null)
   const cat = getCategory(place.category)
   const [insights, setInsights] = useState(null)
@@ -114,7 +114,7 @@ function PlaceMarker({ place, active, onSelect, onStatusToggle, onDelete }) {
             </button>
           </div>
 
-          {aiEnabled() && (
+          {aiEnabled && (
             <div className="insights">
               {!insights && !insightsLoading && !insightsError && (
                 <button
@@ -154,7 +154,7 @@ function PlaceMarker({ place, active, onSelect, onStatusToggle, onDelete }) {
   )
 }
 
-export default function Map({ places, selectedId, onSelect, onStatusToggle, onDelete }) {
+export default function Map({ places, selectedId, onSelect, onStatusToggle, onDelete, aiEnabled }) {
   const selected = useMemo(
     () => places.find((p) => p.id === selectedId) || null,
     [places, selectedId],
@@ -187,6 +187,7 @@ export default function Map({ places, selectedId, onSelect, onStatusToggle, onDe
           onSelect={onSelect}
           onStatusToggle={onStatusToggle}
           onDelete={onDelete}
+          aiEnabled={aiEnabled}
         />
       ))}
     </MapContainer>

@@ -3,19 +3,31 @@
   command = "npm run build"
   publish = "dist"
 
-# AI is bring-your-own-key by default: each visitor enters their own Groq key
-# in the app (stored in their browser), so there is no central key to manage.
+# Accounts + data are backed by Supabase. Set these in the Netlify dashboard
+# (Site settings → Environment variables):
+#   VITE_SUPABASE_URL            project URL          (shipped to browser, safe)
+#   VITE_SUPABASE_ANON_KEY       anon public key      (shipped to browser, safe)
+#   SUPABASE_URL                 same project URL     (server-only)
+#   SUPABASE_ANON_KEY            same anon key        (server-only)
+#   SUPABASE_SERVICE_ROLE_KEY    service role secret  (server-only, NEVER VITE_)
 #
-# To instead run a shared, server-side key for everyone, uncomment the line
-# below and set GROQ_API_KEY in the Netlify dashboard — the included function
-# (netlify/functions/ai.mjs) then proxies AI calls. A user's own key, if set,
-# always takes priority over the shared one.
-# [build.environment]
-#   VITE_AI_PROXY_URL = "/api/ai"
+# The AI proxy (netlify/functions/ai.mjs) reads each signed-in user's Groq key
+# from the database with the service role and calls Groq — the key is never
+# sent to the browser. The app posts AI requests to /api/ai (see redirect
+# below); no build-time flag is needed.
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+# Local `netlify dev`: run Vite on 5173 and serve this app + functions on 8888,
+# applying the redirects below (so /api/ai reaches the function locally).
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  framework = "#custom"
+  autoLaunch = false
 
 # AI proxy: map the app's /api/ai to the serverless function. Must come before
 # the SPA fallback below (redirects are evaluated top-to-bottom, first match

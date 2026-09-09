@@ -1,72 +1,56 @@
-// Per-user settings — currently the user's own Groq API key and an optional
-// display name, stored in this browser.
+// Per-account settings — display name (profiles table) and the AI credential
+// status (ai_credentials, via security-definer RPCs).
 //
-// This module is the seam for a future backend: today it reads/writes
-// localStorage, but every caller goes through these functions, so swapping in
-// a DB-backed, per-account implementation later (key + places synced across
-// devices) is a change here, not across the app.
-const KEY_STORAGE = 'roamly.groq.key'
-const NAME_STORAGE = 'roamly.profile.name'
-const MODEL_STORAGE = 'roamly.groq.model'
+// The Groq key is SERVER-ONLY: it is written through the ai_set RPC and read
+// back only as a boolean (has_key) via ai_status. The raw key never returns to
+// the browser after it is saved — actual AI calls resolve it server-side in
+// the Netlify function using the service role.
+import { supabase } from './supabase.js'
 
-export function getGroqKey() {
-  try {
-    return localStorage.getItem(KEY_STORAGE) || ''
-  } catch {
-    return ''
-  }
+// ---------- profile name ----------
+export async function getProfileName() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return ''
+  const { data } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .maybeSingle()
+  // Fall back to the name captured at signup if the profile row lags.
+  return data?.display_name || user.user_metadata?.display_name || ''
 }
 
-export function setGroqKey(value) {
-  try {
-    if (value) localStorage.setItem(KEY_STORAGE, value)
-    else localStorage.removeItem(KEY_STORAGE)
-  } catch {
-    /* ignore */
-  }
+export async function setProfileName(value) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return
+  await supabase
+    .from('profiles')
+    .upsert({ id: user.id, display_name: (value || '').trim() })
 }
 
-export function hasGroqKey() {
-  return Boolean(getGroqKey())
+// ---------- AI credential status ----------
+// Returns { hasKey, model }. Never returns the key itself.
+export async function getAiStatus() {
+  const { data, error } = await supabase.rpc('ai_status')
+  if (error) return { hasKey: false, model: '' }
+  const row = Array.isArray(data) ? data[0] : data
+  return { hasKey: Boolean(row?.has_key), model: row?.model || '' }
 }
 
-// A short, masked preview for the settings UI (never the full key).
-export function maskedGroqKey() {
-  const k = getGroqKey()
-  if (!k) return ''
-  return k.length <= 10 ? '••••' : `${k.slice(0, 4)}••••${k.slice(-4)}`
+// Save (or replace) the key and/or model. Empty key keeps the existing one.
+export async function setAiCredentials(key, model) {
+  const { error } = await supabase.rpc('ai_set', {
+    p_key: (key || '').trim(),
+    p_model: (model || '').trim(),
+  })
+  if (error) throw error
 }
 
-export function getGroqModel() {
-  try {
-    return localStorage.getItem(MODEL_STORAGE) || ''
-  } catch {
-    return ''
-  }
-}
-
-export function setGroqModel(value) {
-  try {
-    if (value) localStorage.setItem(MODEL_STORAGE, value)
-    else localStorage.removeItem(MODEL_STORAGE)
-  } catch {
-    /* ignore */
-  }
-}
-
-export function getProfileName() {
-  try {
-    return localStorage.getItem(NAME_STORAGE) || ''
-  } catch {
-    return ''
-  }
-}
-
-export function setProfileName(value) {
-  try {
-    if (value) localStorage.setItem(NAME_STORAGE, value)
-    else localStorage.removeItem(NAME_STORAGE)
-  } catch {
-    /* ignore */
-  }
+export async function clearAiCredentials() {
+  const { error } = await supabase.rpc('ai_clear')
+  if (error) throw error
 }

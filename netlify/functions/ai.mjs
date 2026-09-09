@@ -1,10 +1,18 @@
-// Netlify serverless proxy for AI calls.
+// Netlify serverless proxy for AI calls — per-account, server-only key.
 //
-// Keeps the Groq API key server-side: the browser POSTs to /api/ai, and this
-// function forwards the request to Groq using GROQ_API_KEY (a *non*-VITE
-// environment variable set in the Netlify dashboard, never shipped to the
-// client). The frontend reaches this via VITE_AI_PROXY_URL="/api/ai", which a
-// netlify.toml redirect maps to this function, so no key is ever in the bundle.
+// Flow:
+//   1. Browser POSTs { messages, temperature, json } with the caller's
+//      Supabase access token in the Authorization header.
+//   2. This function verifies the token with Supabase (→ the user id).
+//   3. Using the SERVICE ROLE key (server-only), it reads that user's Groq key
+//      and model from ai_credentials — a table clients cannot read.
+//   4. It calls Groq and passes the response straight back.
+//
+// Required environment variables (set in the Netlify dashboard, NOT VITE_*, so
+// they never ship to the browser):
+//   SUPABASE_URL                 your project URL
+//   SUPABASE_ANON_KEY            anon public key (used to verify the token)
+//   SUPABASE_SERVICE_ROLE_KEY    service role key (bypasses RLS to read the key)
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const DEFAULT_MODEL = 'openai/gpt-oss-20b'
 const ALLOWED_MODELS = new Set([
@@ -23,11 +31,53 @@ function json(body, status = 200) {
   })
 }
 
+// Verify a Supabase access token and return the user, or null.
+async function getUser(url, anonKey, token) {
+  try {
+    const res = await fetch(`${url}/auth/v1/user`, {
+      headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+// Read the user's stored Groq key + model using the service role (bypasses RLS).
+async function getCredentials(url, serviceKey, userId) {
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/ai_credentials?user_id=eq.${userId}&select=groq_key,groq_model`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+    )
+    if (!res.ok) return null
+    const rows = await res.json()
+    return Array.isArray(rows) && rows[0] ? rows[0] : null
+  } catch {
+    return null
+  }
+}
+
 export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
-  const key = process.env.GROQ_API_KEY
-  if (!key) return json({ error: 'Server is missing GROQ_API_KEY.' }, 500)
+  const url = process.env.SUPABASE_URL
+  const anonKey = process.env.SUPABASE_ANON_KEY
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !anonKey || !serviceKey)
+    return json({ error: 'Server is missing Supabase environment variables.' }, 500)
+
+  const auth = req.headers.get('authorization') || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token) return json({ error: 'Missing authorization token.' }, 401)
+
+  const user = await getUser(url, anonKey, token)
+  if (!user?.id) return json({ error: 'Invalid or expired session.' }, 401)
+
+  const creds = await getCredentials(url, serviceKey, user.id)
+  if (!creds?.groq_key)
+    return json({ error: 'No Groq key on file for this account.' }, 402)
 
   let payload
   try {
@@ -36,29 +86,37 @@ export default async (req) => {
     return json({ error: 'Invalid JSON body.' }, 400)
   }
 
-  const { messages, model, temperature, response_format } = payload || {}
-  if (!Array.isArray(messages) || messages.length === 0) {
+  const { messages, temperature, json: wantJson } = payload || {}
+  if (!Array.isArray(messages) || messages.length === 0)
     return json({ error: 'A non-empty "messages" array is required.' }, 400)
+
+  const model = ALLOWED_MODELS.has(creds.groq_model) ? creds.groq_model : DEFAULT_MODEL
+
+  const body = {
+    model,
+    messages,
+    temperature: typeof temperature === 'number' ? temperature : 0.4,
+    ...(wantJson ? { response_format: { type: 'json_object' } } : {}),
   }
 
-  const chosenModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL
-
-  try {
-    const groqRes = await fetch(GROQ_URL, {
+  const call = (payloadBody) =>
+    fetch(GROQ_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: chosenModel,
-        messages,
-        temperature: typeof temperature === 'number' ? temperature : 0.4,
-        ...(response_format ? { response_format } : {}),
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${creds.groq_key}` },
+      body: JSON.stringify(payloadBody),
     })
 
-    // Pass Groq's OpenAI-shaped response straight through (success or error).
+  try {
+    let groqRes = await call(body)
+
+    // Some reasoning models reject strict JSON mode with a 400 — retry once
+    // without response_format (prompts already ask for JSON; parser is lenient).
+    if (!groqRes.ok && groqRes.status === 400 && wantJson) {
+      const { response_format, ...noJson } = body
+      void response_format
+      groqRes = await call(noJson)
+    }
+
     const text = await groqRes.text()
     return new Response(text, {
       status: groqRes.status,

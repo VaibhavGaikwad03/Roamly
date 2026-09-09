@@ -1,11 +1,7 @@
-import { aiEnabled, aiMode } from '../lib/ai.js'
-
 // Sidebar entry points for the "generate" AI features. When AI isn't set up it
-// invites the user to connect their own key instead.
-export default function AiPanel({ onRecommend, onPlan, onOpenSettings }) {
-  const enabled = aiEnabled()
-  const usingOwnKey = aiMode() === 'user'
-
+// invites the user to connect their own key instead. `enabled` reflects whether
+// the signed-in account has a Groq key on file (resolved in App).
+export default function AiPanel({ enabled, onRecommend, onPlan, onOpenSettings }) {
   return (
     <section className="ai-panel">
       <div className="ai-panel__title">✨ Roamly AI</div>
@@ -19,11 +15,9 @@ export default function AiPanel({ onRecommend, onPlan, onOpenSettings }) {
               Plan a trip
             </button>
           </div>
-          {usingOwnKey && (
-            <p className="ai-panel__manage">
-              Using your Groq key · <button onClick={onOpenSettings}>manage</button>
-            </p>
-          )}
+          <p className="ai-panel__manage">
+            Using your Groq key · <button onClick={onOpenSettings}>manage</button>
+          </p>
         </>
       ) : (
         <>

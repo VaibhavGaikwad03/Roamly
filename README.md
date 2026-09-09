@@ -32,64 +32,77 @@ category.
     to visit, a tip.
   - **Recommendations** — suggestions based on where you've been, one-tap to add.
   - **Trip planner** — turns your want-to-visit list into a day-by-day itinerary.
-- **💾 Persistent** — everything is saved in your browser's `localStorage`, so
-  your places are still there when you come back. No account, no backend.
+- **👤 Accounts & sync** — sign up with an email and password; your places sync
+  across every device you sign in on.
+- **💾 Persistent** — everything is saved to a **Supabase** (Postgres) database,
+  scoped to your account by row-level security. Theme is remembered per device.
+
+## Setup — accounts & database (required)
+
+Roamly uses [Supabase](https://supabase.com) for accounts and data. One-time setup:
+
+1. **Create a free Supabase project** at [supabase.com](https://supabase.com).
+2. **Run the schema.** In the project's **SQL Editor**, paste the contents of
+   [`supabase/schema.sql`](supabase/schema.sql) and **Run**. This creates the
+   `profiles`, `places`, and `ai_credentials` tables with row-level security
+   and the AI-credential functions.
+3. **Get your keys** from **Project Settings → API**: the **Project URL** and
+   the **anon public** key.
+4. **Configure the app.** Copy `.env.example` to `.env` and set:
+   ```
+   VITE_SUPABASE_URL=<your project URL>
+   VITE_SUPABASE_ANON_KEY=<your anon public key>
+   ```
+   Then run `npm install && npm run dev`.
+5. **For AI on a deploy** (Netlify), also set these **server-side** env vars in
+   the Netlify dashboard (plain, not `VITE_`): `SUPABASE_URL`,
+   `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` (the **service_role**
+   secret from the same API page). These let the AI proxy read each user's key
+   server-side; the key is never exposed to the browser.
+
+The anon key is safe to expose in the browser — row-level security ensures each
+user can only read and write their own rows.
 
 ## AI setup (optional)
 
-### Bring your own key (default — no config)
+### Bring your own key — stored securely on your account
 
 Each user connects their **own** Groq key from inside the app: click
 **✨ Connect AI** (sidebar) or **🔑 AI key** (footer), paste a key from
 [console.groq.com/keys](https://console.groq.com/keys), and **Verify & save**.
-The key is stored only in that browser and sent straight to Groq — there's no
-central key to manage or expose. This is the default on a public deploy, so
-every visitor uses their own key and quota.
+The key is stored **server-side on your account** (never in the browser after
+setup); AI requests go through a serverless function that reads it with the
+service role and calls Groq. Each user uses their own key and quota.
 
-> Account login with cross-device sync (key **and** saved places) is planned;
-> the key/profile access is already isolated behind `src/lib/settings.js` so a
+> Saved places and the AI key now sync per account via Supabase; access stays
+> isolated behind `src/lib/settings.js` and `src/lib/storage.js` so a
 > backend can slot in there without touching the rest of the app.
 
-### Or configure a key at build time (optional)
+AI runs only where the serverless function is available (a Netlify deploy, or
+`netlify dev` locally). All AI calls route through one module (`src/lib/ai.js`)
+and the proxy (`netlify/functions/ai.mjs`), so the transport is in one place.
 
-For local development or a shared key, copy `.env.example` to `.env` and set
-**one** of the following. A user's own in-app key always takes priority over
-these.
-
-```
-# Local / personal — calls Groq directly from the browser (simplest).
-# Free key: https://console.groq.com/keys
-VITE_GROQ_API_KEY=your_key_here
-
-# — or, for a public deployment — point at your own serverless proxy that
-#   holds the key server-side, keeping it out of the shipped page:
-VITE_AI_PROXY_URL=https://your-proxy.example/ai
-```
-
-> ⚠️ A `VITE_GROQ_API_KEY` is bundled into the built page, so it's visible to
-> anyone who loads the site. That's fine for **local / personal** use. For a
-> **public** deployment, use the serverless proxy below so the key stays
-> server-side. All AI calls route through one module (`src/lib/ai.js`), so
-> switching is a config change, not a code change.
-
-## Deploying to Netlify (with the AI key kept server-side)
+## Deploying to Netlify
 
 This repo is Netlify-ready: `netlify.toml` sets the build (`npm run build` →
-`dist`), wires `VITE_AI_PROXY_URL=/api/ai`, and a serverless function
-(`netlify/functions/ai.mjs`) proxies AI calls to Groq using a server-side key.
+`dist`) and maps `/api/ai` to the serverless function
+(`netlify/functions/ai.mjs`), which resolves each signed-in user's Groq key
+server-side and forwards to Groq.
 
 1. Connect the repo in Netlify (build settings come from `netlify.toml`).
-2. In **Site settings → Environment variables**, add:
+2. In **Site settings → Environment variables**, add both the browser-safe and
+   server-only Supabase values:
    ```
-   GROQ_API_KEY = your_groq_key      # server-side only — no VITE_ prefix
+   VITE_SUPABASE_URL          = https://<project>.supabase.co
+   VITE_SUPABASE_ANON_KEY     = <anon public key>
+   SUPABASE_URL               = https://<project>.supabase.co
+   SUPABASE_ANON_KEY          = <anon public key>
+   SUPABASE_SERVICE_ROLE_KEY  = <service_role secret>   # server-only, no VITE_
    ```
-   Do **not** set `VITE_GROQ_API_KEY` in Netlify — that would bundle the key
-   into the public page. Leave it unset; the proxy handles AI in production.
-3. Deploy. The browser calls `/api/ai`, the function adds the key and forwards
-   to Groq, and the key never reaches the client.
-
-> Because `VITE_AI_PROXY_URL` is set at build time, the AI features light up
-> automatically once `GROQ_API_KEY` is present on the server.
+   Never give the service role key a `VITE_` prefix — that would bundle the
+   secret into the public page.
+3. Deploy. Users sign up / sign in, and their places and AI key live in your
+   Supabase project. AI requests hit `/api/ai`; the key never reaches the client.
 
 ## Tech stack
 

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { searchPlaces, searchProvider, reverseGeocode, guessCategory } from '../lib/places.js'
 import { parseGoogleMapsUrl, isGoogleMapsShortLink } from '../lib/googleMaps.js'
-import { aiEnabled, extractPlacesFromText } from '../lib/ai.js'
+import { extractPlacesFromText } from '../lib/ai.js'
 import { CATEGORIES, getCategory } from '../lib/categories.js'
 
 // Search for a place — by name/keyword or by pasting a Google Maps link —
 // then add it to the tracker with a category, status, and notes.
-export default function PlaceForm({ onAdd }) {
+export default function PlaceForm({ onAdd, aiEnabled = false }) {
   const [mode, setMode] = useState('search') // search | link
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -214,7 +214,7 @@ export default function PlaceForm({ onAdd }) {
             >
               🔗 Link
             </button>
-            {aiEnabled() && (
+            {aiEnabled && (
               <button
                 type="button"
                 className={mode === 'ai' ? 'active' : ''}

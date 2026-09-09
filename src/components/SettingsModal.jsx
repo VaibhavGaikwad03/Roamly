@@ -1,13 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { verifyGroqKey, DEFAULT_MODEL } from '../lib/ai.js'
 import {
-  getGroqKey,
-  setGroqKey,
-  maskedGroqKey,
-  getGroqModel,
-  setGroqModel,
   getProfileName,
   setProfileName,
+  getAiStatus,
+  setAiCredentials,
+  clearAiCredentials,
 } from '../lib/settings.js'
 
 // A short list of common Groq models. Availability varies by account, so the
@@ -23,18 +21,33 @@ const MODELS = [
 ]
 
 export default function SettingsModal({ onClose, onSaved }) {
-  const [name, setName] = useState(getProfileName())
+  const [name, setName] = useState('')
   const [key, setKey] = useState('')
   const [show, setShow] = useState(false)
-
-  const savedModel = getGroqModel() || DEFAULT_MODEL
-  const known = MODELS.some((m) => m.id === savedModel)
-  const [modelChoice, setModelChoice] = useState(known ? savedModel : '__custom__')
-  const [customModel, setCustomModel] = useState(known ? '' : savedModel)
-
+  const [hasKey, setHasKey] = useState(false)
+  const [modelChoice, setModelChoice] = useState(DEFAULT_MODEL)
+  const [customModel, setCustomModel] = useState('')
   const [status, setStatus] = useState(null) // { type, msg }
   const [busy, setBusy] = useState(false)
-  const hadKey = Boolean(getGroqKey())
+  const [loaded, setLoaded] = useState(false)
+
+  // Load current profile name + AI status (has a key? which model?).
+  useEffect(() => {
+    let active = true
+    Promise.all([getProfileName(), getAiStatus()]).then(([n, ai]) => {
+      if (!active) return
+      setName(n || '')
+      setHasKey(ai.hasKey)
+      const savedModel = ai.model || DEFAULT_MODEL
+      const known = MODELS.some((m) => m.id === savedModel)
+      setModelChoice(known ? savedModel : '__custom__')
+      setCustomModel(known ? '' : savedModel)
+      setLoaded(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   function resolvedModel() {
     return modelChoice === '__custom__' ? customModel.trim() : modelChoice
@@ -43,11 +56,8 @@ export default function SettingsModal({ onClose, onSaved }) {
   async function save(verify) {
     const trimmed = key.trim()
     const chosenModel = resolvedModel()
-    setProfileName(name.trim())
-    setGroqModel(chosenModel && chosenModel !== DEFAULT_MODEL ? chosenModel : '')
 
-    const effectiveKey = trimmed || getGroqKey()
-    if (!effectiveKey) {
+    if (!trimmed && !hasKey) {
       setStatus({ type: 'error', msg: 'Enter your Groq API key first.' })
       return
     }
@@ -55,32 +65,48 @@ export default function SettingsModal({ onClose, onSaved }) {
     setBusy(true)
     setStatus(null)
     try {
-      if (verify) {
-        const r = await verifyGroqKey(effectiveKey, chosenModel || DEFAULT_MODEL)
+      // We can only verify a key we currently hold in the browser — i.e. a
+      // freshly typed one. If none was typed, there's nothing to verify.
+      if (verify && trimmed) {
+        const r = await verifyGroqKey(trimmed, chosenModel || DEFAULT_MODEL)
         if (!r.ok) {
           setStatus({ type: 'error', msg: r.error })
           return
         }
         if (r.warn) setStatus({ type: 'ok', msg: r.warn })
       }
-      if (trimmed) setGroqKey(trimmed)
+
+      await setProfileName(name.trim())
+      // Empty key keeps the existing one; model is always updated.
+      await setAiCredentials(trimmed, chosenModel === DEFAULT_MODEL ? '' : chosenModel)
+
       onSaved()
-      if (verify) {
-        setStatus({ type: 'ok', msg: 'Key and model verified — saved.' })
-        setTimeout(onClose, 700)
+      if (verify && trimmed) {
+        setStatus({ type: 'ok', msg: 'Key and model verified — saved to your account.' })
+        setTimeout(onClose, 800)
       } else {
         onClose()
       }
+    } catch (err) {
+      setStatus({ type: 'error', msg: err.message || 'Could not save. Try again.' })
     } finally {
       setBusy(false)
     }
   }
 
-  function clearKey() {
-    setGroqKey('')
-    setKey('')
-    onSaved()
-    setStatus({ type: 'ok', msg: 'Key removed from this browser.' })
+  async function clearKey() {
+    setBusy(true)
+    try {
+      await clearAiCredentials()
+      setHasKey(false)
+      setKey('')
+      onSaved()
+      setStatus({ type: 'ok', msg: 'Key removed from your account.' })
+    } catch (err) {
+      setStatus({ type: 'error', msg: err.message || 'Could not remove key.' })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -89,7 +115,7 @@ export default function SettingsModal({ onClose, onSaved }) {
         <div className="modal__head">
           <div className="modal__title">
             ✨ Connect AI
-            <small>Bring your own Groq key — it stays in this browser.</small>
+            <small>Your Groq key is stored securely on your account — never in the browser.</small>
           </div>
           <button className="modal__close" onClick={onClose} aria-label="Close">
             ✕
@@ -110,9 +136,9 @@ export default function SettingsModal({ onClose, onSaved }) {
           <label className="field">
             <span>
               Groq API key{' '}
-              {hadKey && (
+              {hasKey && (
                 <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
-                  · saved ({maskedGroqKey()})
+                  · key on file
                 </span>
               )}
             </span>
@@ -120,7 +146,7 @@ export default function SettingsModal({ onClose, onSaved }) {
               <input
                 type={show ? 'text' : 'password'}
                 value={key}
-                placeholder={hadKey ? 'Enter a new key to replace it…' : 'gsk_…'}
+                placeholder={hasKey ? 'Enter a new key to replace it…' : 'gsk_…'}
                 autoComplete="off"
                 spellCheck="false"
                 onChange={(e) => setKey(e.target.value)}
@@ -172,19 +198,17 @@ export default function SettingsModal({ onClose, onSaved }) {
             <a href="https://console.groq.com/docs/models" target="_blank" rel="noreferrer">
               model list
             </a>
-            . Stored only on this device. <b>Account sync is planned.</b>
+            . Stored server-side and used only for your account's AI requests.
           </p>
 
           {status && (
-            <p className={status.type === 'error' ? 'form__error' : 'form__ok'}>
-              {status.msg}
-            </p>
+            <p className={status.type === 'error' ? 'form__error' : 'form__ok'}>{status.msg}</p>
           )}
 
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 14 }}>
             <div>
-              {hadKey && (
-                <button type="button" className="btn btn--ghost" onClick={clearKey}>
+              {hasKey && (
+                <button type="button" className="btn btn--ghost" onClick={clearKey} disabled={busy}>
                   Remove key
                 </button>
               )}
@@ -194,7 +218,7 @@ export default function SettingsModal({ onClose, onSaved }) {
                 type="button"
                 className="btn btn--ghost"
                 onClick={() => save(false)}
-                disabled={busy}
+                disabled={busy || !loaded}
               >
                 Save
               </button>
@@ -202,9 +226,9 @@ export default function SettingsModal({ onClose, onSaved }) {
                 type="button"
                 className="btn btn--ai"
                 onClick={() => save(true)}
-                disabled={busy}
+                disabled={busy || !loaded}
               >
-                {busy ? 'Verifying…' : 'Verify & save'}
+                {busy ? 'Working…' : 'Verify & save'}
               </button>
             </div>
           </div>

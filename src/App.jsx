@@ -8,7 +8,9 @@ import AiModal from './components/AiModal.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import { CATEGORIES } from './lib/categories.js'
 import { HERO } from './lib/scenes.js'
-import { loadPlaces, savePlaces, createId } from './lib/storage.js'
+import { loadPlaces, insertPlace, updatePlace, deletePlace } from './lib/storage.js'
+import { getAiStatus } from './lib/settings.js'
+import { useAuth } from './lib/auth.jsx'
 
 function getInitialTheme() {
   try {
@@ -19,7 +21,10 @@ function getInitialTheme() {
 }
 
 export default function App() {
-  const [places, setPlaces] = useState(() => loadPlaces())
+  const { user, signOut } = useAuth()
+
+  const [places, setPlaces] = useState([])
+  const [loadingPlaces, setLoadingPlaces] = useState(true)
   const [selectedId, setSelectedId] = useState(null)
   const [status, setStatus] = useState('all') // all | want | visited
   const [activeCategories, setActiveCategories] = useState([])
@@ -28,14 +33,32 @@ export default function App() {
   const [view, setView] = useState('map') // mobile: map | list
   const [aiModal, setAiModal] = useState(null) // 'recommend' | 'plan' | null
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [, bumpAi] = useState(0) // force re-eval of aiEnabled() after key changes
+  const [aiStatus, setAiStatus] = useState({ hasKey: false, model: '' })
 
-  // Persist places.
+  // Load this account's places once signed in.
   useEffect(() => {
-    savePlaces(places)
-  }, [places])
+    let active = true
+    setLoadingPlaces(true)
+    loadPlaces()
+      .then((rows) => {
+        if (active) setPlaces(rows)
+      })
+      .catch((err) => console.warn('Could not load places:', err))
+      .finally(() => {
+        if (active) setLoadingPlaces(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [user?.id])
 
-  // Apply + persist theme.
+  // Load AI credential status (has key? which model?).
+  const refreshAiStatus = () => getAiStatus().then(setAiStatus).catch(() => {})
+  useEffect(() => {
+    refreshAiStatus()
+  }, [user?.id])
+
+  // Apply + persist theme (a per-device preference — stays in localStorage).
   useEffect(() => {
     const root = document.documentElement
     if (theme) root.setAttribute('data-theme', theme)
@@ -48,7 +71,6 @@ export default function App() {
     }
   }, [theme])
 
-  // Reflect mobile view on <body> for CSS.
   useEffect(() => {
     document.body.dataset.view = view
   }, [view])
@@ -60,25 +82,44 @@ export default function App() {
     setTheme(isDark ? 'light' : 'dark')
   }
 
-  function addPlace(draft) {
-    const place = { id: createId(), createdAt: Date.now(), ...draft }
-    setPlaces((prev) => [place, ...prev])
-    setSelectedId(place.id)
+  async function addPlace(draft) {
+    try {
+      const place = await insertPlace(draft)
+      setPlaces((prev) => [place, ...prev])
+      setSelectedId(place.id)
+      return place
+    } catch (err) {
+      console.warn('Could not add place:', err)
+      alert('Could not save that place. Please try again.')
+    }
   }
 
-  function toggleStatus(id) {
-    setPlaces((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, status: p.status === 'visited' ? 'want' : 'visited' }
-          : p,
-      ),
-    )
+  async function toggleStatus(id) {
+    const current = places.find((p) => p.id === id)
+    if (!current) return
+    const next = current.status === 'visited' ? 'want' : 'visited'
+    // Optimistic update, reconciled/reverted on error.
+    setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)))
+    try {
+      await updatePlace(id, { status: next })
+    } catch (err) {
+      console.warn('Could not update status:', err)
+      setPlaces((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, status: current.status } : p)),
+      )
+    }
   }
 
-  function deletePlace(id) {
-    setPlaces((prev) => prev.filter((p) => p.id !== id))
+  async function removePlace(id) {
+    const prev = places
+    setPlaces((cur) => cur.filter((p) => p.id !== id))
     setSelectedId((cur) => (cur === id ? null : cur))
+    try {
+      await deletePlace(id)
+    } catch (err) {
+      console.warn('Could not delete place:', err)
+      setPlaces(prev)
+    }
   }
 
   function toggleCategory(id) {
@@ -102,8 +143,7 @@ export default function App() {
     const term = search.trim().toLowerCase()
     return places.filter((p) => {
       if (status !== 'all' && p.status !== status) return false
-      if (activeCategories.length > 0 && !activeCategories.includes(p.category))
-        return false
+      if (activeCategories.length > 0 && !activeCategories.includes(p.category)) return false
       if (term) {
         const hay = `${p.name} ${p.address} ${p.notes || ''}`.toLowerCase()
         if (!hay.includes(term)) return false
@@ -114,6 +154,8 @@ export default function App() {
 
   const hasFilters =
     status !== 'all' || activeCategories.length > 0 || search.trim() !== ''
+
+  const aiEnabled = aiStatus.hasKey
 
   return (
     <div className="app">
@@ -152,19 +194,20 @@ export default function App() {
             </div>
             <div className="progress__meta">
               <span>
-                <i style={{ background: '#fff' }} />
+                <i />
                 {counts.visited} visited
               </span>
               <span>
-                <i style={{ background: 'rgba(255,255,255,.5)' }} />
+                <i />
                 {counts.want} want to visit
               </span>
             </div>
           </div>
 
-          <PlaceForm onAdd={addPlace} />
+          <PlaceForm onAdd={addPlace} aiEnabled={aiEnabled} />
 
           <AiPanel
+            enabled={aiEnabled}
             onRecommend={() => setAiModal('recommend')}
             onPlan={() => setAiModal('plan')}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -190,25 +233,37 @@ export default function App() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onStatusToggle={toggleStatus}
-              onDelete={deletePlace}
+              onDelete={removePlace}
               emptyHint={
-                places.length === 0
-                  ? 'No places yet — search above to add your first one.'
-                  : hasFilters
-                    ? 'No places match these filters.'
-                    : 'No places to show.'
+                loadingPlaces
+                  ? 'Loading your places…'
+                  : places.length === 0
+                    ? 'No places yet — search above to add your first one.'
+                    : hasFilters
+                      ? 'No places match these filters.'
+                      : 'No places to show.'
               }
             />
           </div>
         </div>
 
         <footer className="foot">
-          <button className="theme-toggle" onClick={() => setSettingsOpen(true)}>
-            🔑 AI key
-          </button>
-          <button className="theme-toggle" onClick={toggleTheme}>
-            ◑ Theme
-          </button>
+          <div className="foot__user" title={user?.email}>
+            <span className="foot__avatar" aria-hidden="true">
+              {(user?.user_metadata?.display_name || user?.email || '?').trim().charAt(0).toUpperCase()}
+            </span>
+            <button className="foot__signout" onClick={signOut}>
+              Sign out
+            </button>
+          </div>
+          <div className="foot__actions">
+            <button className="theme-toggle" onClick={() => setSettingsOpen(true)}>
+              🔑 AI key
+            </button>
+            <button className="theme-toggle" onClick={toggleTheme}>
+              ◑ Theme
+            </button>
+          </div>
         </footer>
       </aside>
 
@@ -218,7 +273,8 @@ export default function App() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           onStatusToggle={toggleStatus}
-          onDelete={deletePlace}
+          onDelete={removePlace}
+          aiEnabled={aiEnabled}
         />
         <div className="legend">
           <b>Categories</b>
@@ -232,16 +288,10 @@ export default function App() {
       </main>
 
       <div className="mobile-tab">
-        <button
-          className={view === 'list' ? 'active' : ''}
-          onClick={() => setView('list')}
-        >
+        <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
           Places
         </button>
-        <button
-          className={view === 'map' ? 'active' : ''}
-          onClick={() => setView('map')}
-        >
+        <button className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}>
           Map
         </button>
       </div>
@@ -258,7 +308,7 @@ export default function App() {
       {settingsOpen && (
         <SettingsModal
           onClose={() => setSettingsOpen(false)}
-          onSaved={() => bumpAi((n) => n + 1)}
+          onSaved={refreshAiStatus}
         />
       )}
     </div>
