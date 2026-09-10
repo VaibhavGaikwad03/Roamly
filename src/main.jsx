@@ -2,15 +2,28 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import Auth from './components/Auth.jsx'
+import LandingPage from './components/ui/landing-page.tsx'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import 'leaflet/dist/leaflet.css'
 import './index.css'
 
+// Signed-out visitors see the marketing landing page first; its CTAs set the
+// #signin hash to move on to the auth screen. Signed-in visitors always skip
+// straight to the app, regardless of hash.
+const wantsSignIn = () => window.location.hash === '#signin'
+
 // Decides what to show: a setup notice if Supabase isn't configured, a loading
-// splash while the session resolves, the auth screen when signed out, else the
-// app.
+// splash while the session resolves, then — when signed out — the landing page
+// (or the auth screen once they choose to sign in), else the app.
 function Root() {
   const { configured, loading, user } = useAuth()
+  const [signIn, setSignIn] = React.useState(wantsSignIn())
+
+  React.useEffect(() => {
+    const onHashChange = () => setSignIn(wantsSignIn())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   if (!configured) {
     return (
@@ -36,7 +49,10 @@ function Root() {
     )
   }
 
-  return user ? <App /> : <Auth />
+  if (user) return <App />
+
+  // Signed out: landing page first, auth screen once they choose to continue.
+  return signIn ? <Auth /> : <LandingPage />
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -1,3 +1,61 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* -------------------------------------------------------------------------
+   shadcn/ui token bridge (Tailwind v4)
+   Maps shadcn's semantic color utilities (bg-background, text-muted-foreground,
+   bg-primary, border-border, …) onto Roamly's existing "Clear" design-system
+   variables below. Because those variables already flip for dark mode, the
+   shadcn-based components (e.g. components/ui/landing-page) inherit Roamly's
+   palette and light/dark themes automatically — no separate slate palette.
+   ------------------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--panel-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--panel-2);
+  --color-muted-foreground: var(--ink-soft);
+  --color-accent: var(--panel-2);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent);
+
+  /* Drives the `animate-fadeOut` utility used by the nav labels */
+  --animate-fadeOut: fadeOutLabel 2s ease-in-out forwards;
+}
+
+/* Default border color for the bare `border` utility (shadcn convention).
+   Sits in @layer base, so Roamly's own unlayered rules always win over it. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+}
+
+@keyframes fadeOutLabel {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(0.5rem) scale(0.95);
+  }
+}
+
 /* =========================================================================
    Roamly — "Clear" design system
    Apple-grounded product UI: system-font typography with size-specific
@@ -1778,6 +1836,114 @@ textarea {
   .legend,
   .mobile-tab,
   .leaflet-control-zoom a {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--panel);
+  }
+}
+
+/* =========================================================================
+   Landing-page design language, brought into the app
+   Echoes components/ui/landing-page: gradient-clipped display headings, a
+   glowing gradient primary button with a soft lift, accent-tinted glass
+   surfaces, and an elevated glassy auth card. Layered after the base
+   primitives so it augments them; every value is theme-token based, so light
+   and dark both track automatically.
+   ========================================================================= */
+
+/* --- Let the landing page scroll the window ---
+   The app shell locks the document (body { overflow: hidden }, full-height
+   html/body/#root) so the map dashboard never scrolls. The landing page is a
+   tall, window-scrolled experience, so while it's mounted it tags <body> with
+   .landing-active to release that lock. Higher specificity than the base
+   rules, so it wins regardless of source order. */
+body.landing-active {
+  overflow: visible;
+  height: auto;
+}
+body.landing-active #root {
+  height: auto;
+  min-height: 100%;
+}
+
+/* --- Gradient-clipped display headings (the hero's bg-clip-text look) --- */
+.progress__bignum,
+.modal__title,
+.auth__title {
+  background: linear-gradient(
+    118deg,
+    var(--ink),
+    color-mix(in srgb, var(--ink) 68%, var(--accent))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+/* Muted sub-labels nested in those headings must opt back out of the clip */
+.progress__bignum small,
+.modal__title small {
+  -webkit-text-fill-color: var(--ink-faint);
+  color: var(--ink-faint);
+}
+
+/* --- Glowing gradient primary button (landing's shadow-primary glow) --- */
+.btn--primary {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 90%, #ffffff 10%),
+    var(--accent-strong)
+  );
+  box-shadow: 0 8px 20px var(--accent-ring), 0 1px 2px rgba(20, 60, 40, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.btn--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+.btn--primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+/* Secondary buttons pick up the landing's accent-tinted hover border */
+.btn--ghost:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
+}
+
+/* --- Accent-tinted lift on interactive cards (landing's feature cards) --- */
+.card:hover {
+  box-shadow: var(--shadow), 0 12px 28px var(--accent-soft);
+}
+
+/* --- Gentle pulse on status/accent dots (landing's animate-pulse dots) --- */
+@keyframes accentPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.progress__meta span i {
+  animation: accentPulse 2.6s var(--ease-out) infinite;
+}
+
+/* --- Elevated, glassy auth card (mirrors the landing hero's glass card) --- */
+.auth__card {
+  padding: 30px 30px 28px;
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid var(--panel-hair);
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Keep everything legible when the viewer reduces transparency */
+@media (prefers-reduced-transparency: reduce) {
+  .auth__card {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: var(--panel);

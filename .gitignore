@@ -25,3 +25,6 @@ yarn-error.log*
 
 # Netlify
 .netlify/
+
+# Claude Code (local skills / preview config)
+.claude/
